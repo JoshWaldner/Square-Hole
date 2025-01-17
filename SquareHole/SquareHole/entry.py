@@ -90,7 +90,7 @@ def command_created(args: adsk.core.CommandCreatedEventArgs):
     BodySelect.setSelectionLimits(0, 0)
 
     # TODO Connect to the events that are needed by this command.
-    futil.add_handler(args.command.execute, command_execute2, local_handlers=local_handlers)
+    futil.add_handler(args.command.execute, command_execute, local_handlers=local_handlers)
     futil.add_handler(args.command.inputChanged, command_input_changed, local_handlers=local_handlers)
     futil.add_handler(args.command.executePreview, command_preview, local_handlers=local_handlers)
     futil.add_handler(args.command.validateInputs, command_validate_input, local_handlers=local_handlers)
@@ -99,7 +99,7 @@ def command_created(args: adsk.core.CommandCreatedEventArgs):
 
 # This event handler is called when the user clicks the OK button in the command dialog or 
 # is immediately called after the created event not command inputs were created for the dialog.
-def command_execute2(args: adsk.core.CommandEventArgs):
+def command_execute(args: adsk.core.CommandEventArgs):
     # General logging for debug.
     #futil.log(f'{CMD_NAME} Command Execute Event')
     inputs = args.command.commandInputs
@@ -205,73 +205,5 @@ def command_destroy(args: adsk.core.CommandEventArgs):
     global local_handlers
     local_handlers = []
 
-
-def command_execute(args: adsk.core.CommandEventArgs):
-    # General logging for debug.
-    #futil.log(f'{CMD_NAME} Command Execute Event')
-    inputs = args.command.commandInputs
-    app = adsk.core.Application.get()
-    ui = app.userInterface
-    des: adsk.fusion.Design = app.activeProduct
-    root: adsk.fusion.Component = des.rootComponent
-    tempBrepMgr = adsk.fusion.TemporaryBRepManager.get()
-    # TODO ******************************** Your code here ********************************
-    Bodies = []
-    count = 1
-    BodySelecter: adsk.core.SelectionCommandInput = inputs.itemById("BodySelecter")
-    for Body in range(0, BodySelecter.selectionCount):
-        SelectedBody: adsk.fusion.BRepBody = BodySelecter.selection(Body).entity
-        Bodies.append(SelectedBody)
-    if len(Bodies) > 0:
-        progressDialog = ui.createProgressDialog()
-        progressDialog.cancelButtonText = 'Cancel'
-        progressDialog.isBackgroundTranslucent = False
-        progressDialog.isCancelButtonShown = True
-        
-        # Show dialog
-        progressDialog.show('Progress Dialog', "", 0, len(Bodies)) 
-        for body in Bodies:
-            progressDialog.message = f"{body.name}\n %v of %m\n %p% Completed"
-            body: adsk.fusion.BRepBody
-            if progressDialog.wasCancelled:
-                break
-            for Surface in body.faces:
-                SurfaceCount = 1
-                ProgressBar = ui.progressBar
-                ProgressBar.show("Calculating", 1, body.faces.count)
-                if Surface.geometry.objectType == 'adsk::core::Cylinder' and Surface.isParamReversed is True:
-                    
-                    Sketch = root.sketches.addWithoutEdges(root.xYConstructionPlane)
-                    CylinderOrigin = Surface.geometry.origin
-                    CylinderAxis = Surface.geometry.axis
-                    Point1 = CylinderOrigin.copy()
-                    Point1.translateBy(CylinderAxis)
-                    Line = Sketch.sketchCurves.sketchLines.addByTwoPoints(Sketch.modelToSketchSpace(CylinderOrigin), Sketch.modelToSketchSpace(Point1))
-                    PlaneInput = root.constructionPlanes.createInput()
-                    PlaneInput.setByDistanceOnPath(Line, adsk.core.ValueInput.createByReal(0))
-                    Plane = root.constructionPlanes.add(PlaneInput)
-                    Sketch2 = root.sketches.addWithoutEdges(Plane)
-                    RectCorner1 = adsk.core.Point3D.create(Surface.geometry.radius, Surface.geometry.radius, 0)
-                    RectCorner2 = adsk.core.Point3D.create(-Surface.geometry.radius, -Surface.geometry.radius, 0)
-                    square = Sketch2.sketchCurves.sketchLines.addTwoPointRectangle(RectCorner1, RectCorner2)
-                    extrudes = root.features.extrudeFeatures
-                    prof = Sketch2.profiles.item(0)
-                    ExtrudeInput = extrudes.createInput(prof, adsk.fusion.FeatureOperations.CutFeatureOperation)
-                    extent_all = adsk.fusion.ThroughAllExtentDefinition.create()
-                    ExtrudeInput.setTwoSidesExtent(extent_all, extent_all)
-                    ExtrudeInput.participantBodies = [Surface.body]
-                    ExtrudeFeature = extrudes.add(ExtrudeInput)
-                    Sketch.deleteMe()                
-                    Sketch2.deleteMe()
-                    Plane.deleteMe()
-                    ExtrudeFeature.dissolve()
-                    ProgressBar.progressValue = SurfaceCount
-                    SurfaceCount += 1
-                    adsk.doEvents()
-            progressDialog.progressValue = count        
-            count += 1
-            
-
-        progressDialog.hide()       
 
             
